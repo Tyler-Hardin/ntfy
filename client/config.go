@@ -22,6 +22,11 @@ type Config struct {
 	DefaultToken    string      `yaml:"default-token"`
 	DefaultCommand  string      `yaml:"default-command"`
 	Subscribe       []Subscribe `yaml:"subscribe"`
+
+	// CertFile is the path to a PKCS#12 (.p12) file used for mTLS client authentication.
+	// CertPassword is the password for the PKCS#12 file (may be empty).
+	CertFile     string `yaml:"cert-file"`
+	CertPassword string `yaml:"cert-password"`
 }
 
 // Subscribe is the struct for a Subscription within Config
@@ -43,6 +48,8 @@ func NewConfig() *Config {
 		DefaultToken:    "",
 		DefaultCommand:  "",
 		Subscribe:       nil,
+		CertFile:        "",
+		CertPassword:    "",
 	}
 }
 

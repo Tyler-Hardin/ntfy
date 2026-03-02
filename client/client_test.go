@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 func TestClient_Publish_Subscribe(t *testing.T) {
 	s, port := test.StartServer(t)
 	defer test.StopServer(t, s, port)
-	c := client.New(newTestConfig(port))
+	c, _ := client.New(newTestConfig(port))
 
 	subscriptionID, _ := c.Subscribe("mytopic")
 	time.Sleep(time.Second)
@@ -76,7 +76,7 @@ func TestClient_Publish_Subscribe(t *testing.T) {
 func TestClient_Publish_Poll(t *testing.T) {
 	s, port := test.StartServer(t)
 	defer test.StopServer(t, s, port)
-	c := client.New(newTestConfig(port))
+	c, _ := client.New(newTestConfig(port))
 
 	msg, err := c.Publish("mytopic", "some message", client.WithNoFirebase(), client.WithTagsList("tag1,tag2"))
 	require.Nil(t, err)
@@ -108,7 +108,8 @@ func TestClient_Publish_HeaderWithNewlines(t *testing.T) {
 	conf.BaseURL = "http://127.0.0.1" // Attachments require a base URL
 	s, port := test.StartServerWithConfig(t, conf)
 	defer test.StopServer(t, s, port)
-	c := client.New(newTestConfig(port))
+	c, err := client.New(newTestConfig(port))
+	require.Nil(t, err)
 
 	// With an attachment as the body, message and title must travel as headers (see #1808)
 	msg, err := c.PublishReader("mytopic", strings.NewReader("file contents"),

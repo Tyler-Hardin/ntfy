@@ -5,8 +5,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"gopkg.in/yaml.v2"
+	"heckel.io/ntfy/v2/client"
 	"heckel.io/ntfy/v2/util"
 	"os"
+	"strings"
 )
 
 // initConfigFileInputSourceFunc is like altsrc.InitInputSourceWithContext and altsrc.NewYamlSourceFromFlagFunc, but checks
@@ -57,4 +59,22 @@ func newYamlSourceFromFile(file string, flags []cli.Flag) (altsrc.InputSourceCon
 		}
 	}
 	return altsrc.NewMapInputSource(file, rawConfig), nil
+}
+
+// parseCertFlag reads the --cert flag (format: file.p12 or file.p12:password) and
+// populates conf.CertFile and conf.CertPassword. It is a no-op when the flag is not set.
+func parseCertFlag(c *cli.Context, conf *client.Config) error {
+	certArg := c.String("cert")
+	if certArg == "" {
+		return nil
+	}
+	// Split on the LAST colon to allow Windows paths like C:\path\to\file.p12:pass
+	if idx := strings.LastIndex(certArg, ":"); idx != -1 {
+		conf.CertFile = certArg[:idx]
+		conf.CertPassword = certArg[idx+1:]
+	} else {
+		conf.CertFile = certArg
+		conf.CertPassword = ""
+	}
+	return nil
 }
