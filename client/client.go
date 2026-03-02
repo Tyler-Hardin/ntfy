@@ -4,6 +4,7 @@ package client
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,10 +12,13 @@ import (
 	"heckel.io/ntfy/v2/util"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 const (
@@ -34,6 +38,7 @@ var (
 type Client struct {
 	Messages      chan *Message
 	config        *Config
+	http          *http.Client
 	subscriptions map[string]*subscription
 	mu            sync.Mutex
 }
@@ -75,12 +80,45 @@ type subscription struct {
 }
 
 // New creates a new Client using a given Config
-func New(config *Config) *Client {
+func New(config *Config) (*Client, error) {
+	httpClient, err := newHTTPClient(config)
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		Messages:      make(chan *Message, 50), // Allow reading a few messages
 		config:        config,
+		http:          httpClient,
 		subscriptions: make(map[string]*subscription),
+	}, nil
+}
+
+// newHTTPClient creates an HTTP client, optionally configured with a PKCS#12 client certificate
+// for mTLS when config.CertFile is set.
+func newHTTPClient(config *Config) (*http.Client, error) {
+	if config.CertFile == "" {
+		return &http.Client{}, nil
 	}
+	p12Data, err := os.ReadFile(config.CertFile)
+	if err != nil {
+		return nil, fmt.Errorf("reading cert file %s: %w", config.CertFile, err)
+	}
+	privateKey, cert, caCerts, err := pkcs12.DecodeChain(p12Data, config.CertPassword)
+	if err != nil {
+		return nil, fmt.Errorf("decoding cert file %s: %w", config.CertFile, err)
+	}
+	tlsCert := tls.Certificate{
+		Certificate: [][]byte{cert.Raw},
+		PrivateKey:  privateKey,
+		Leaf:        cert,
+	}
+	for _, ca := range caCerts {
+		tlsCert.Certificate = append(tlsCert.Certificate, ca.Raw)
+	}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+	}
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}, nil
 }
 
 // Publish sends a message to a specific topic, optionally using options.
@@ -112,7 +150,7 @@ func (c *Client) PublishReader(topic string, body io.Reader, options ...PublishO
 		}
 	}
 	log.Debug("%s Publishing message with headers %s", util.ShortTopicURL(topicURL), req.Header)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +190,7 @@ func (c *Client) Poll(topic string, options ...SubscribeOption) ([]*Message, err
 	log.Debug("%s Polling from topic", util.ShortTopicURL(topicURL))
 	options = append(options, WithPoll())
 	go func() {
-		err := performSubscribeRequest(ctx, msgChan, topicURL, "", options...)
+		err := performSubscribeRequest(ctx, c.http, msgChan, topicURL, "", options...)
 		close(msgChan)
 		errChan <- err
 	}()
@@ -196,7 +234,7 @@ func (c *Client) Subscribe(topic string, options ...SubscribeOption) (string, er
 		topicURL: topicURL,
 		cancel:   cancel,
 	}
-	go handleSubscribeConnLoop(ctx, c.Messages, topicURL, subscriptionID, options...)
+	go handleSubscribeConnLoop(ctx, c.http, c.Messages, topicURL, subscriptionID, options...)
 	return subscriptionID, nil
 }
 
@@ -225,11 +263,11 @@ func (c *Client) expandTopicURL(topic string) (string, error) {
 	return fmt.Sprintf("%s/%s", c.config.DefaultHost, topic), nil
 }
 
-func handleSubscribeConnLoop(ctx context.Context, msgChan chan *Message, topicURL, subcriptionID string, options ...SubscribeOption) {
+func handleSubscribeConnLoop(ctx context.Context, httpClient *http.Client, msgChan chan *Message, topicURL, subcriptionID string, options ...SubscribeOption) {
 	for {
 		// TODO The retry logic is crude and may lose messages. It should record the last message like the
 		//      Android client, use since=, and do incremental backoff too
-		if err := performSubscribeRequest(ctx, msgChan, topicURL, subcriptionID, options...); err != nil {
+		if err := performSubscribeRequest(ctx, httpClient, msgChan, topicURL, subcriptionID, options...); err != nil {
 			log.Warn("%s Connection failed: %s", util.ShortTopicURL(topicURL), err.Error())
 		}
 		select {
@@ -241,7 +279,7 @@ func handleSubscribeConnLoop(ctx context.Context, msgChan chan *Message, topicUR
 	}
 }
 
-func performSubscribeRequest(ctx context.Context, msgChan chan *Message, topicURL string, subscriptionID string, options ...SubscribeOption) error {
+func performSubscribeRequest(ctx context.Context, httpClient *http.Client, msgChan chan *Message, topicURL string, subscriptionID string, options ...SubscribeOption) error {
 	streamURL := fmt.Sprintf("%s/json", topicURL)
 	log.Debug("%s Listening to %s", util.ShortTopicURL(topicURL), streamURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
@@ -253,7 +291,7 @@ func performSubscribeRequest(ctx context.Context, msgChan chan *Message, topicUR
 			return err
 		}
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

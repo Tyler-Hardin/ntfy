@@ -35,6 +35,7 @@ require (
 	github.com/stripe/stripe-go/v74 v74.30.0
 	golang.org/x/sys v0.40.0
 	golang.org/x/text v0.33.0
+	software.sslmate.com/src/go-pkcs12 v0.7.0
 )
 
 require (

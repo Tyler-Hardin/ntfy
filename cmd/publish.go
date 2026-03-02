@@ -39,6 +39,7 @@ var flagsPublish = append(
 	&cli.StringFlag{Name: "email", Aliases: []string{"mail", "e"}, EnvVars: []string{"NTFY_EMAIL"}, Usage: "also send to e-mail address"},
 	&cli.StringFlag{Name: "user", Aliases: []string{"u"}, EnvVars: []string{"NTFY_USER"}, Usage: "username[:password] used to auth against the server"},
 	&cli.StringFlag{Name: "token", Aliases: []string{"k"}, EnvVars: []string{"NTFY_TOKEN"}, Usage: "access token used to auth against the server"},
+	&cli.StringFlag{Name: "cert", EnvVars: []string{"NTFY_CERT"}, Usage: "PKCS#12 client certificate for mTLS, in the format file.p12[:password]"},
 	&cli.IntFlag{Name: "wait-pid", Aliases: []string{"wait_pid", "pid"}, EnvVars: []string{"NTFY_WAIT_PID"}, Usage: "wait until PID exits before publishing"},
 	&cli.BoolFlag{Name: "wait-cmd", Aliases: []string{"wait_cmd", "cmd", "done"}, EnvVars: []string{"NTFY_WAIT_CMD"}, Usage: "run command and wait until it finishes before publishing"},
 	&cli.BoolFlag{Name: "no-cache", Aliases: []string{"no_cache", "C"}, EnvVars: []string{"NTFY_NO_CACHE"}, Usage: "do not cache message server-side"},
@@ -90,6 +91,9 @@ it has incredibly useful information: https://ntfy.sh/docs/publish/.
 func execPublish(c *cli.Context) error {
 	conf, err := loadConfig(c)
 	if err != nil {
+		return err
+	}
+	if err := parseCertFlag(c, conf); err != nil {
 		return err
 	}
 	title := c.String("title")
@@ -229,7 +233,10 @@ func execPublish(c *cli.Context) error {
 			}
 		}
 	}
-	cl := client.New(conf)
+	cl, err := client.New(conf)
+	if err != nil {
+		return err
+	}
 	m, err := cl.PublishReader(topic, body, options...)
 	if err != nil {
 		return err
