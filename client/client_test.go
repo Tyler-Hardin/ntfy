@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 func TestClient_Publish_Subscribe(t *testing.T) {
 	s, port := test.StartServer(t)
 	defer test.StopServer(t, s, port)
-	c := client.New(newTestConfig(port))
+	c, _ := client.New(newTestConfig(port))
 
 	subscriptionID, _ := c.Subscribe("mytopic")
 	time.Sleep(time.Second)
@@ -74,7 +74,7 @@ func TestClient_Publish_Subscribe(t *testing.T) {
 func TestClient_Publish_Poll(t *testing.T) {
 	s, port := test.StartServer(t)
 	defer test.StopServer(t, s, port)
-	c := client.New(newTestConfig(port))
+	c, _ := client.New(newTestConfig(port))
 
 	msg, err := c.Publish("mytopic", "some message", client.WithNoFirebase(), client.WithTagsList("tag1,tag2"))
 	require.Nil(t, err)

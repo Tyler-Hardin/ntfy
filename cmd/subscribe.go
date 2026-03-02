@@ -24,6 +24,7 @@ var flagsSubscribe = append(
 	&cli.StringFlag{Name: "since", Aliases: []string{"s"}, Usage: "return events since `SINCE` (Unix timestamp, or all)"},
 	&cli.StringFlag{Name: "user", Aliases: []string{"u"}, EnvVars: []string{"NTFY_USER"}, Usage: "username[:password] used to auth against the server"},
 	&cli.StringFlag{Name: "token", Aliases: []string{"k"}, EnvVars: []string{"NTFY_TOKEN"}, Usage: "access token used to auth against the server"},
+	&cli.StringFlag{Name: "cert", EnvVars: []string{"NTFY_CERT"}, Usage: "PKCS#12 client certificate for mTLS, in the format file.p12[:password]"},
 	&cli.BoolFlag{Name: "from-config", Aliases: []string{"from_config", "C"}, Usage: "read subscriptions from config file (service mode)"},
 	&cli.BoolFlag{Name: "poll", Aliases: []string{"p"}, Usage: "return events and exit, do not listen for new events"},
 	&cli.BoolFlag{Name: "scheduled", Aliases: []string{"sched", "S"}, Usage: "also return scheduled/delayed events"},
@@ -88,7 +89,13 @@ func execSubscribe(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cl := client.New(conf)
+	if err := parseCertFlag(c, conf); err != nil {
+		return err
+	}
+	cl, err := client.New(conf)
+	if err != nil {
+		return err
+	}
 	since := c.String("since")
 	user := c.String("user")
 	token := c.String("token")

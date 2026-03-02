@@ -507,7 +507,7 @@ func TestCLI_Serve_WebSocket(t *testing.T) {
 	require.Equal(t, websocket.TextMessage, messageType)
 	require.Equal(t, "open", toMessage(t, string(data)).Event)
 
-	c := client.New(client.NewConfig())
+	c, _ := client.New(client.NewConfig())
 	_, err = c.Publish(fmt.Sprintf("http://127.0.0.1:%d/mytopic", port), "my message")
 	require.Nil(t, err)
 
